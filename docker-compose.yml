@@ -1,0 +1,8 @@
+services:
+  nijigasaki-whisper:
+    image: nijigasaki-whisper
+    ports:
+      - 8501:8501
+    volumes:
+      - ./config.json:/app/config.json
+      - ./.streamlit/secrets.toml:/app/.streamlit/secrets.toml
