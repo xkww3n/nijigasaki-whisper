@@ -1,6 +1,10 @@
 from openai import OpenAI
 import streamlit as st
 import base64
+import os
+import zipfile
+from pathlib import Path
+import tempfile
 
 def setup_openai_client(config):
     try:
@@ -57,3 +61,45 @@ def transcribe_audio(audio_file_path, config, format):
     except Exception as e:
         st.error(f"转写音频时出错: {str(e)}")
         return None
+
+def batch_transcribe_audio(audio_files_paths, original_filenames, config, format):
+    if not audio_files_paths:
+        return None, None, None
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        output_files = []
+        
+        for i, (audio_path, original_name) in enumerate(zip(audio_files_paths, original_filenames)):
+            progress_text = f"处理文件 {i+1}/{len(audio_files_paths)}: {original_name}"
+            st.text(progress_text)
+            
+            transcription = transcribe_audio(audio_path, config, format)
+            
+            if transcription:
+                result = transcription.choices[0].message.content
+                if result:
+                    output_filename = f"{Path(original_name).stem}.{format}"
+                    output_path = temp_dir_path / output_filename
+                    with open(output_path, "w", encoding="utf-8") as f:
+                        f.write(result)
+                    
+                    output_files.append(output_path)
+        
+        if not output_files:
+            return None, None, None
+        
+        if len(output_files) == 1:
+            with open(output_files[0], "rb") as f:
+                content = f.read()
+            return content, "text/plain", output_files[0].name
+        
+        zip_path = temp_dir_path / "transcriptions.zip"
+        with zipfile.ZipFile(zip_path, "w") as zipf:
+            for file_path in output_files:
+                zipf.write(file_path, arcname=file_path.name)
+        
+        with open(zip_path, "rb") as f:
+            content = f.read()
+        
+        return content, "application/zip", "transcriptions.zip"

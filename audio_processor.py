@@ -43,3 +43,15 @@ def process_uploaded_file(uploaded_file):
             audio_path = ffmpeg_convert(tmp_file, "mp3")
             tmp_file.unlink()
     return audio_path
+
+def process_multiple_uploaded_files(uploaded_files):
+    audio_paths = []
+    original_filenames = []
+    
+    for uploaded_file in uploaded_files:
+        audio_path = process_uploaded_file(uploaded_file)
+        if audio_path:
+            audio_paths.append(audio_path)
+            original_filenames.append(uploaded_file.name)
+    
+    return audio_paths, original_filenames

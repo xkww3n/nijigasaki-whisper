@@ -1,8 +1,8 @@
 import streamlit as st
 from pathlib import Path
 from config import load_config
-from audio_processor import process_uploaded_file
-from openai_client import transcribe_audio
+from audio_processor import process_uploaded_file, process_multiple_uploaded_files
+from openai_client import transcribe_audio, batch_transcribe_audio
 
 def main():
     st.set_page_config(
@@ -25,9 +25,10 @@ def main():
     
     st.subheader("上传文件", anchor=False)
 
-    uploaded_file = st.file_uploader(
+    uploaded_files = st.file_uploader(
         "选择音频或视频文件",
         type=config["app"]["supported_audio_formats"] + config["app"]["supported_video_formats"],
+        accept_multiple_files=True
     )
     
     output_format = st.radio(
@@ -37,30 +38,60 @@ def main():
         horizontal=True
     )
     
-    if uploaded_file:
-        if st.button("开始转写", type="primary"):
-            uploaded_path = Path(uploaded_file.name)
-            with st.spinner(f"处理文件: {uploaded_path}"):
-                audio_path = process_uploaded_file(uploaded_file)
-                
-                if audio_path:
-                    transcription = transcribe_audio(audio_path, config, output_format)
+    if uploaded_files:
+        file_count = len(uploaded_files)
+        
+        if st.button(f"开始转写 {file_count} 个文件", type="primary"):
+            with st.spinner("处理文件中..."):
+                if file_count > 1:
+                    audio_paths, original_filenames = process_multiple_uploaded_files(uploaded_files)
                     
-                    if transcription:
-                        result = transcription.choices[0].message.content
-                        if result:
-                            st.subheader("转写结果", anchor=False)
-                            st.text_area("转写结果", value=result, height=300, label_visibility="hidden", disabled=True)
+                    if audio_paths:
+                        st.subheader("批量转写处理", anchor=False)
+                        
+                        content, mime_type, filename = batch_transcribe_audio(
+                            audio_paths, original_filenames, config, output_format
+                        )
+                        
+                        if content:
+                            st.success(f"成功处理 {len(audio_paths)} 个文件")
                             st.download_button(
                                 label="下载转写结果",
-                                data=result,
-                                file_name=f"{uploaded_path.stem}.{output_format}",
-                                mime="text/plain"
+                                data=content,
+                                file_name=filename,
+                                mime=mime_type
                             )
                         else:
                             st.error("转写结果为空，无法下载")
-                            
-                    audio_path.unlink()
+
+                        for audio_path in audio_paths:
+                            audio_path.unlink(missing_ok=True)
+                    else:
+                        st.error("处理文件时出错")
+                
+                else:
+                    uploaded_file = uploaded_files[0]
+                    uploaded_path = Path(uploaded_file.name)
+                    audio_path = process_uploaded_file(uploaded_file)
+                    
+                    if audio_path:
+                        transcription = transcribe_audio(audio_path, config, output_format)
+                        
+                        if transcription:
+                            result = transcription.choices[0].message.content
+                            if result:
+                                st.subheader("转写结果", anchor=False)
+                                st.text_area("转写结果", value=result, height=300, label_visibility="hidden", disabled=True)
+                                st.download_button(
+                                    label="下载转写结果",
+                                    data=result,
+                                    file_name=f"{uploaded_path.stem}.{output_format}",
+                                    mime="text/plain"
+                                )
+                            else:
+                                st.error("转写结果为空，无法下载")
+                                
+                        audio_path.unlink(missing_ok=True)
 
 if __name__ == "__main__":
     main()
